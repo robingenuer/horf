@@ -39,7 +39,7 @@ freg <- function(x, freg.name) {
 #' @param sigma The standard deviation of the centered gaussian noise added to computed output values (default to 1/4)
 #' @inheritParams freg
 #'
-#' @returns
+#' @returns A list containing the simulated inputs `x` and outputs `y`.
 #' @export
 #'
 #' @examples
@@ -119,8 +119,8 @@ forest_structure <- function(
 #'
 #' @examples
 #' aforest <- forest_structure(k = 5, xdim = 1, freg.name = "sinus", ntree = 10, nbobs = 100, mtry = 1)
-#' interval_bounds(aforest, 1, 3)
-interval_bounds <- function(
+#' interval_node_bounds(aforest, 1, 3)
+interval_node_bounds <- function(
     forest, ind_tree, node, dim.int = forest$bestvar[node, ind_tree]) {
 
   bounds <- matrix(NA, nrow = length(dim.int), ncol = 2)
@@ -174,7 +174,7 @@ hyper_rec_base <- function(ind_tree, forest, hrec, d) {
 
   for (i in 2: nrnodes) {
     hrec.base[i, , , ] <-
-      interval_bounds(
+      interval_node_bounds(
         forest = forest, ind_tree = ind_tree, node = i, dim.int = 1:d)
   }
 
