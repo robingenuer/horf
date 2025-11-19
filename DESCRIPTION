@@ -1,12 +1,18 @@
 Package: horandomforest
-Title: What the Package Does (One Line, Title Case)
+Title: Implementation of Hold-Out Random Forests
 Version: 0.0.0.9000
-Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"))
-Description: What the package does (one paragraph).
+Authors@R: c(
+    person("Robin", "Genuer", email = "robin.genuer@u-bordeaux.fr", role = c("aut", "cre")),
+    person("Sylvain", "Arlot", role = c("aut")))
+Description: This package contains necessary functions to reproduce the
+simulation experiments of the article Arlot and Genuer (2026). In this article
+the rate of convergence of Hold-Out Random Forests are studied. Thus, the
+package gives an implementation of this Random Forests variant and a plot
+function to visualize the convergence rate.
 License: GPL (>= 3)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 URL: https://github.com/robingenuer/horandomforest
 BugReports: https://github.com/robingenuer/horandomforest/issues
+Imports: randomForest
