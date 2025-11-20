@@ -18,7 +18,7 @@ interval_node_bounds(
 
 \item{node}{Node of the tree to consider}
 
-\item{dim.int}{a vector of the different dimensions of the input space used for splitting the node, usually (and always for Hold-Out RF) a vector of length one, historically here for dealing for other purely random forests variants}
+\item{dim.int}{A vector of the dimensions of the input space for which the interval bounds are computed (default is only the dimension where the split of that node has been made)}
 }
 \value{
 A vector of length 2 containing the bounds of the interval associated to that node of that tree
@@ -28,5 +28,5 @@ Bounds computation associated to a node of a tree (of a forest)
 }
 \examples{
 aforest <- forest_structure(k = 5, xdim = 1, freg.name = "sinus", ntree = 10, nbobs = 100, mtry = 1)
-interval_node_bounds(aforest, 1, 3)
+interval_node_bounds(aforest, ind_tree = 1, node = 3)
 }

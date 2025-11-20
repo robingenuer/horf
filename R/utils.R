@@ -39,7 +39,7 @@ freg <- function(x, freg.name) {
 #' @param sigma The standard deviation of the centered gaussian noise added to computed output values (default to 1/4)
 #' @inheritParams freg
 #'
-#' @returns A list containing the simulated inputs `x` and outputs `y`.
+#' @returns A list containing the simulated matrix of inputs `x` and the simulated one-column matrix of outputs `y`.
 #' @export
 #'
 #' @examples
@@ -82,6 +82,7 @@ beta_fried1 <- function(h) {
 #' @inheritParams randomForest::randomForest
 #'
 #' @returns The `forest` component of a `randomForest` class object from the `randomForest` package
+#' @export
 #'
 #' @examples
 #' aforest <- forest_structure(k = 5, xdim = 1, freg.name = "sinus", ntree = 10, nbobs = 100, mtry = 1)
@@ -113,13 +114,14 @@ forest_structure <- function(
 #' @param forest The forest structure resulting from the `forest_structure` function
 #' @param ind_tree Index of the tree to consider
 #' @param node Node of the tree to consider
-#' @param dim.int a vector of the different dimensions of the input space used for splitting the node, usually (and always for Hold-Out RF) a vector of length one, historically here for dealing for other purely random forests variants
+#' @param dim.int A vector of the dimensions of the input space for which the interval bounds are computed (default is only the dimension where the split of that node has been made)
 #'
 #' @returns A vector of length 2 containing the bounds of the interval associated to that node of that tree
+#' @export
 #'
 #' @examples
 #' aforest <- forest_structure(k = 5, xdim = 1, freg.name = "sinus", ntree = 10, nbobs = 100, mtry = 1)
-#' interval_node_bounds(aforest, 1, 3)
+#' interval_node_bounds(aforest, ind_tree = 1, node = 3)
 interval_node_bounds <- function(
     forest, ind_tree, node, dim.int = forest$bestvar[node, ind_tree]) {
 
@@ -164,9 +166,8 @@ interval_node_bounds <- function(
   return(bounds)
 }
 
-
-# Hyper-rectangles coordinates computation
-hyper_rec_base <- function(ind_tree, forest, hrec, d) {
+#' Hyper-rectangles coordinates computation of the partitions sets of one particular tree of a forest
+hyper_rec_base <- function(ind_tree, forest, hrec, xdim) {
   hrec.base <- hrec[, ind_tree, , , drop = FALSE]
   nrnodes <- forest$nrnodes
   tree <- lapply(forest[-(1:2)], FUN = function(x)
@@ -175,20 +176,31 @@ hyper_rec_base <- function(ind_tree, forest, hrec, d) {
   for (i in 2: nrnodes) {
     hrec.base[i, , , ] <-
       interval_node_bounds(
-        forest = forest, ind_tree = ind_tree, node = i, dim.int = 1:d)
+        forest = forest, ind_tree = ind_tree, node = i, dim.int = 1:xdim)
   }
 
   return(hrec.base)
 }
 
-hyper_rec <- function(forest, d) {
+
+#' Hyper-rectangles coordinates computation of the partitions sets of the trees of a forest
+#' @inheritParams interval_node_bounds
+#' @inheritParams simul_data
+#'
+#' @returns An array with same dimensions as `hrec` filled with the coordinates of the hyper-rectangles associated to all sets of the partition of the input space (defined by the `ind_tree`-th tree of the `forest` for `hyper_rec_base()` and for all trees of the `forest` for `hyper_rec()`).
+#' @export
+#'
+#' @examples
+#' aforest <- forest_structure(k = 5, xdim = 1, freg.name = "sinus", ntree = 10, nbobs = 100, mtry = 1)
+#' hyper_rec(forest = aforest, xdim = 1)
+hyper_rec <- function(forest, xdim) {
   ntree <- forest$ntree
   nrnodes <- forest$nrnodes
-  hrec <- array(data = NA, dim=c(nrnodes, ntree, d, 2))
+  hrec <- array(data = NA, dim=c(nrnodes, ntree, xdim, 2))
   hrec[1, , , 1] <- 0
   hrec[1, , , 2] <- 1
   hrec_bases_list <- lapply(
-    1:ntree, hyper_rec_base, forest = forest, hrec = hrec, d = d)
+    1:ntree, hyper_rec_base, forest = forest, hrec = hrec, xdim = xdim)
 
   for (j in 1:ntree) {
     hrec[, j, , ] <- hrec_bases_list[[j]]
@@ -198,16 +210,25 @@ hyper_rec <- function(forest, d) {
 }
 
 
-# Ideal forest built
+#' Ideal forest built
+#'
+#' @inheritParams forest_structure
+#'
+#' @returns A forest list with the `nodepred` component filled with the theoretical values when we know the regression function exactly (hence the name *ideal* forest).
+#' @export
+#'
+#' @examples
+#' aforest <- forest_tilde(k = 5, xdim = 1, freg.name = "sinus", ntree = 10, nbobs = 100, mtry = 1)
+#' aforest$nodepred
 forest_tilde <- function(
-    k, d, freg.name, ntree, nbobs = NULL, mtry = max(1, floor(d/3)),
-    seed = NULL, mc.cores = 1) {
+    k, xdim, freg.name, ntree, nbobs = NULL, mtry = max(1, floor(xdim/3)),
+    seed = NULL) {
 
     forest <- forest_structure(
-      k = k, d = d, freg.name = freg.name, ntree = ntree,
+      k = k, xdim = xdim, freg.name = freg.name, ntree = ntree,
       nbobs = nbobs, mtry = mtry, seed = seed)
 
-      hrec <- hyper_rec(forest = forest, d = d)
+      hrec <- hyper_rec(forest = forest, xdim = xdim)
 
       if (freg.name == "sum") {
         forest$nodepred <- apply(X = hrec, MARGIN = 1:2, FUN = sum) / 2
@@ -238,17 +259,22 @@ forest_tilde <- function(
 }
 
 
-# Descent of an observation in a tree
-descent <- function(z, forest, ind_tree,  freg.name,
-                    tree_type = "final") {
+#' Descent of an observation in a tree
+#'
+#' @param z A vector of the coordinates of the observation we want to let go down the tree
+#' @inheritParams interval_node_bounds
+#' @inheritParams simul_data
+#'
+#' @returns The index of the node where observation `z` falls into.
+#' @export
+#'
+#' @examples
+#' aforest <- forest_structure(k = 5, xdim = 1, freg.name = "sinus", ntree = 10, nbobs = 100, mtry = 1)
+#' z = 0.5
+#' descent(z, forest = aforest, ind_tree = 1)
+descent <- function(z, forest, ind_tree) {
     node <- 1
-
-    if (tree_type == "final") {
-      status <- -1
-    }
-    if (tree_type == "building") {
-      status <- 0
-    }
+    status <- -1
 
     while (forest$nodestatus[node, ind_tree] != status) {
       if (z[forest$bestvar[node, ind_tree]] <=
@@ -261,160 +287,36 @@ descent <- function(z, forest, ind_tree,  freg.name,
   return(node)
 }
 
+#' Predicts all observations (rows) of a matrix with a forest
+#'
+#' @param zmat A matrix with observations to predict in rows
+#' @inheritParams descent
+#'
+#' @returns A vector of the predicted values of all rows of the matrix `z` by the `forest`.
+#' @export
+#'
+#' @examples
+#' aforest <- forest_tilde(k = 5, xdim = 1, freg.name = "sinus", ntree = 10, nbobs = 100, mtry = 1)
+#' zmat <- matrix(c(0.2, 0.7), nrow = 2, ncol = 1)
+#' f_estim(zmat, aforest)
+f_estim <- function(zmat, forest) {
+  n <- length(zmat[, 1])
+  estims <- unlist(lapply(
+    1:n, FUN = f_estim_base, zmat = zmat, forest = forest))
+  return(estims)
+}
 
-# Predict one observation with a forest
-f_estim_base <- function(ind_obs, x, forest,  freg.name) {
+#' Predicts one observation (one row) of a matrix with a forest
+#'
+f_estim_base <- function(ind_obs, zmat, forest) {
   pred.trees <- rep(NA, forest$ntree)
   for (ind_tree in 1:forest$ntree) {
-    node <- descent(z = x[ind_obs, ], forest = forest, ind_tree = ind_tree,
-                    freg.name = freg.name)
+    node <- descent(z = zmat[ind_obs, ], forest = forest, ind_tree = ind_tree)
     pred.trees[ind_tree] <- forest$nodepred[node, ind_tree]
   }
   return(mean(pred.trees))
 }
 
-
-# Predict all observations of x with a forest
-f_estim <- function(x, forest,  freg.name, mc.cores=1) {
-    n <- length(x[, 1])
-    estims <- unlist(parallel::mclapply(
-      1:n, FUN = f_estim_base, x = x, forest = forest,
-      freg.name = freg.name, mc.cores=mc.cores))
-  return(estims)
-}
-
-
-## TREE
-# Ideal tree computation
-tree_tilde <- function(
-    k, d,  freg.name, nbobs = NULL, mtry = max(1, floor(d/3)),
-    seed = NULL) {
-
-    tree <- forest_tilde(
-      k = k, d = d,  freg.name = freg.name, ntree = 1,
-      nbobs = nbobs, mtry = mtry,
-      seed = seed, mc.cores = 1)
-  return(tree)
-}
-
-
-# Predict all observations of x with one tree
-t_estim <- function(x, tree,  freg.name) {
-    estims <- f_estim(
-      x = x, forest = tree,  freg.name = freg.name)
-  return(estims)
-}
-
-
-# Forest bias computation
-bias_for <- function(
-    nbleaves,  freg.name, d, nbobs = NULL, beta = 1, nfor = 1,
-    r = 500, b = 1, mtry = max(1, floor(d/3)), tree = FALSE,
-    var_estim = FALSE, seeds = FALSE,
-    mc.cores2 = 1) {
-
-  debut <- Sys.time()
-  m <- 1
-  for.bias <- vector(mode = "list", length = length(nbleaves))
-  for.bias.res <- matrix(NA, nrow = length(nbleaves), ncol = 4)
-  x.test <- matrix(runif(d*r), ncol = d)
-  s <- freg(x.test, freg.name)
-  if (seeds) {seeds <- dget("outputs/seeds")}
-
-  for (k in nbleaves) {
-    debutk <- Sys.time()
-      x.test.bl <- matrix(runif(d*r, min = b*log(k^(1/d)) / (k^(1/d)),
-                                max = 1 - b*log(k^(1/d)) / (k^(1/d))), ncol = d)
-
-    ntree <- ifelse(tree, 1, max(100, floor(k^beta)))
-
-    for.bias[[m]] <- parallel::mclapply(1:nfor, function(j) {
-      forest <- forest_tilde(k = k, d = d,
-                             freg.name = freg.name, ntree = ntree,
-                             nbobs = nbobs, mtry = mtry)
-      s.tilde <- f_estim(x = x.test, forest = forest,
-                         freg.name = freg.name)
-      # mse <- mean((s - s.tilde)^2)
-      squaredErrors <- (s - s.tilde)^2
-
-      s.bl <- freg(x.test.bl, freg.name)
-      s.tilde.bl <- f_estim(x = x.test.bl, forest = forest,
-                            freg.name = freg.name, )
-      # mse.bl <- mean((s.bl - s.tilde.bl)^2)
-      squaredErrors.bl <- (s.bl - s.tilde.bl)^2
-
-      # return((mse, mse.bl))
-      return(cbind(squaredErrors, squaredErrors.bl))
-    }, mc.cores = mc.cores2)
-
-    allSquaredErrors <- do.call("rbind", for.bias[[m]])
-    for.bias.res[m, c(1, 3)] <- colMeans(allSquaredErrors)
-
-    if (var_estim) {
-      allCrossedSquaredErrors <- tcrossprod(allSquaredErrors[, 1])
-      for (i in 1:nfor) {
-        allCrossedSquaredErrors[1:r + (i-1)*r, 1:r + (i-1)*r] <- NA
-      }
-      allCrossedSquaredErrors[lower.tri(allCrossedSquaredErrors)] <- NA
-
-      for.bias.res[m, 2] <-
-        sqrt(for.bias.res[m, 1]^2 - mean(allCrossedSquaredErrors, na.rm = TRUE))
-
-      allCrossedSquaredErrorsBL <- tcrossprod(allSquaredErrors[, 2])
-      for (i in 1:nfor) {
-        allCrossedSquaredErrorsBL[1:r + (i-1)*r, 1:r + (i-1)*r] <- NA
-      }
-
-      for.bias.res[m, 4] <-
-        sqrt(for.bias.res[m, 3]^2 - mean(allCrossedSquaredErrorsBL, na.rm = TRUE))
-    }
-
-    # indPairs <- seq(1, nrow(allSquaredErrors), by = r+1)
-    # indCrossed <- expand.grid(indPairs, indPairs)
-    # allIndCrossed <- indCrossed[-indPairs, ]
-    #
-    # allIndCrossed <- NULL
-    # for (l in 1:10) {
-    #   indPairs <- seq(l, nrow(allSquaredErrors), by = r+1)
-    #   indCrossed <- expand.grid(indPairs, indPairs)
-    #   allIndCrossed <- rbind(allIndCrossed, indCrossed[-indPairs,])
-    # }
-
-    # allCrossedSquaredErrors <- t(mapply(function(i, j) {
-    #   allSquaredErrors[i,] * allSquaredErrors[j, ]},
-    #   allIndCrossed$Var1, allIndCrossed$Var2))
-    #
-    # for.bias.res[m, c(2, 4)] <-
-    #   for.bias.res[m, c(1, 3)]^2 - colMeans(allCrossedSquaredErrors)
-
-    # for.bias.res[m, c(2, 4)] <- apply(for.bias[[m]], MARGIN = 1, sd)
-    if (tree) {
-      print(paste( "bias tree k =", k, "d =", d, "mtry = ", mtry, "done"))
-    } else {
-      print(paste( "bias forest k =", k, "d =", d, "mtry = ", mtry, "done"))
-    }
-    print(Sys.time() - debutk)
-    m <- m+1
-  }
-
-  names(for.bias) <- nbleaves
-  for.bias.res <- cbind(nbleaves, for.bias.res)
-  colnames(for.bias.res) <- c("nbleaves", "mean", "sd", "BLmean", "BLsd")
-  total_time <- Sys.time() - debut
-  time_unit <- attr(total_time, "units")
-  print(paste0("Total time = ", total_time))
-  save(
-    for.bias.res, for.bias, freg.name,  d, nbleaves, nbobs, beta, nfor,
-    r, b, mtry, tree, total_time, mc.cores2,
-    file = paste0("outputs/",
-                  paste(freg.name,  "dim", d,
-                        "nbleaves", paste(nbleaves, collapse = "_"),
-                        "nbobs", nbobs, "beta", beta, "nfor", nfor, "mtry",
-                        mtry, sep="_"),
-                  ifelse(tree, "_TREE", "_FOREST"),
-                  "_BIAS.Rdata"))
-  return(for.bias)
-}
 
 # Slope computation
 slope <- function(y, x) {

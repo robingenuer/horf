@@ -16,7 +16,7 @@ simul_data(nbobs, xdim, freg.name, sigma = 1/4)
 \item{sigma}{The standard deviation of the centered gaussian noise added to computed output values (default to 1/4)}
 }
 \value{
-A list containing the simulated inputs \code{x} and outputs \code{y}.
+A list containing the simulated matrix of inputs \code{x} and the simulated one-column matrix of outputs \code{y}.
 }
 \description{
 Generation of a simulated dataset associated to a given name of the regression function
