@@ -12,5 +12,6 @@ RoxygenNote: 7.3.3
 URL: https://github.com/robingenuer/horandomforest
 BugReports: https://github.com/robingenuer/horandomforest/issues
 Imports:
-  randomForest,
-  parallel
+  ggplot2,
+  parallel,
+  randomForest
